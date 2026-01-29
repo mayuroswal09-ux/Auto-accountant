@@ -22,9 +22,9 @@ if not st.session_state.logged_in:
         user = st.text_input("Admin Username")
         pwd = st.text_input("Access Key (Password)", type="password")
         if st.button("Login to Gateway of Tally"):
-            if user == "mayur" and pwd == "1234":
-                st.session_state.logged_in = True
-                st.rerun()
+                    if user.lower().strip() == "mayur" and pwd.strip() == "1234":
+            st.session_state.logged_in = True
+            st.rerun()
             else:
                 st.error("Access Denied: Please check credentials")
 else:
