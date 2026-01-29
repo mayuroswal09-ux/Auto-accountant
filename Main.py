@@ -1,4 +1,10 @@
 import streamlit as st
+
+# This line names your app and adds an icon
+st.set_page_config(page_title="My Tally ERP", page_icon="📊", layout="centered")
+
+# ... rest of your code follows below ...
+import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
 
