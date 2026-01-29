@@ -28,7 +28,6 @@ if not st.session_state.logged_in:
         else:
             st.error("Access Denied: Please check credentials")
             
-else:
     # 4. FULL GATEWAY OF TALLY NAVIGATION
     st.sidebar.title("🚩 Gateway of Tally")
     menu = [
