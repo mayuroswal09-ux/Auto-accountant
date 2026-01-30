@@ -1,318 +1,187 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 from supabase import create_client, Client
-from datetime import datetime, date, timedelta
-import json
+from datetime import datetime, date
+from PIL import Image
 import io
 
 # ==========================================
-# 1. CORE SYSTEM CONFIGURATION & STYLING
+# 1. CORE ENGINE & UI STYLING
 # ==========================================
-st.set_page_config(page_title="OSWAL OMEGA ERP: 900-SERIES", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="OSWAL INFINITY ERP", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
     <style>
-    /* Professional Dark Theme */
     .stApp { background: #0d1117; color: #c9d1d9; font-family: 'Segoe UI', sans-serif; }
-    [data-testid="stMetric"] { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px; transition: 0.3s; }
-    [data-testid="stMetric"]:hover { border-color: #ffd700; }
+    [data-testid="stMetric"] { background: #161b22; border: 1px solid #ffd700; border-radius: 12px; padding: 20px; }
     .stSidebar { background: #010409 !important; border-right: 2px solid #ffd700; }
-    .stButton>button { background: linear-gradient(135deg, #ffd700 0%, #b8860b 100%); color: black; font-weight: 800; border: none; height: 45px; width: 100%; border-radius: 8px; }
-    .stTabs [data-baseweb="tab-list"] { gap: 20px; }
-    .stTabs [data-baseweb="tab"] { background-color: #161b22; border-radius: 5px; padding: 10px 20px; color: #8b949e; }
-    .stTabs [aria-selected="true"] { background-color: #ffd700 !important; color: black !important; }
+    .stButton>button { background: #ffd700; color: black; font-weight: 800; border: none; border-radius: 8px; width: 100%; height: 45px; }
+    h1, h2, h3 { color: #ffd700 !important; }
     .report-card { border-left: 5px solid #ffd700; background: #1c2128; padding: 15px; border-radius: 5px; margin-bottom: 10px; }
-    h1, h2, h3 { color: #ffd700 !important; font-weight: 700 !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# ==========================================
-# 2. DATABASE & SESSION STATE
-# ==========================================
+# 2. DATABASE INITIALIZATION
 url, key = st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"]
 supabase = create_client(url, key)
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
-if "active_co" not in st.session_state: st.session_state.active_co = None
 
 # ==========================================
 # 3. AUTHENTICATION MODULE
 # ==========================================
-def authenticate():
-    st.markdown("<h1 style='text-align: center; margin-top: 100px;'>🏆 OSWAL ERP : TITAN ACCESS</h1>", unsafe_allow_html=True)
+if not st.session_state.logged_in:
+    st.markdown("<h1 style='text-align: center; margin-top: 100px;'>🛡️ OSWAL TITAN LOGIN</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1,1.5,1])
     with col2:
-        with st.container():
-            u = st.text_input("Administrator Identity").lower().strip()
-            p = st.text_input("Security Access Key", type="password")
-            if st.button("INITIALIZE ENTERPRISE SYSTEMS"):
-                if u == "mayur" and p == "1234":
-                    st.session_state.logged_in = True
-                    st.rerun()
-                else: st.error("Access Forbidden: Identity Mismatch")
-
-if not st.session_state.logged_in:
-    authenticate()
+        u = st.text_input("Administrator ID")
+        p = st.text_input("Access Key", type="password")
+        if st.button("INITIALIZE CORE"):
+            if u == "mayur" and p == "1234":
+                st.session_state.logged_in = True; st.rerun()
+            else: st.error("Access Forbidden.")
 else:
     # ==========================================
-    # 4. DATA ENGINE (The Heart of the App)
+    # 4. RELATIONAL DATA FETCH (NO ERRORS)
     # ==========================================
+    # Fetch all companies to populate the selector
+    co_res = supabase.table("companies").select("*").execute()
+    co_df = pd.DataFrame(co_res.data)
+    
     st.sidebar.markdown("### 🏢 CORPORATE SECTOR")
-    entities = ["Mayur Oswal Corp", "Shubham Traders", "Global Logistics", "Alpha Manufacturing", "Retail Pro Hub"]
-    st.session_state.active_co = st.sidebar.selectbox("Active Entity", entities)
-    
-    # Global Data Fetch
-    try:
-        res = supabase.table("vouchers").select("*").eq("company_name", st.session_state.active_co).order("date", desc=True).execute()
-        df = pd.DataFrame(res.data)
-    except Exception as e:
-        df = pd.DataFrame()
-        st.sidebar.error(f"Sync Error: {e}")
+    if co_df.empty:
+        st.sidebar.warning("No Companies Found. Go to Masters.")
+        active_co_id = None
+        sel_co_name = "None"
+    else:
+        sel_co_name = st.sidebar.selectbox("Active Entity", co_df['name'].tolist())
+        active_co_id = co_df[co_df['name'] == sel_co_name]['id'].values[0]
 
-    st.sidebar.divider()
-    
-    # 900-LINE FEATURE NAVIGATOR
-    nav_options = [
+    # Main Navigation
+    nav = [
         "📊 Executive Dashboard", "🏛️ Master Setup & Opening", "📝 Smart Voucher Entry", 
         "🔍 Audit Log & Day Book", "📦 Inventory & Batch Control", "⚖️ Final Accounts (P&L/BS)", 
-        "🧾 Receivables & Payables", "🏦 Bank Reconciliation (BRS)", "🇮🇳 Statutory & GST Hub", 
-        "📈 Advanced Ratio Analysis", "🛡️ Forensic Integrity Audit", "⚙️ System Configuration"
+        "🧾 Receivables & Payables", "🏦 Bank Reconciliation (BRS)", "📈 Advanced Ratio Analysis", 
+        "🛡️ Forensic Integrity Audit", "⚙️ System Configuration"
     ]
-    choice = st.sidebar.radio("Gateway of Singularity", nav_options)
+    choice = st.sidebar.radio("Gateway of Singularity", nav)
 
-    # ==========================================
-    # 5. MODULE: EXECUTIVE DASHBOARD
-    # ==========================================
+    # --- MODULE 1: EXECUTIVE DASHBOARD ---
     if choice == "📊 Executive Dashboard":
-        st.title(f"Command Center: {st.session_state.active_co}")
-        if not df.empty:
-            # High-Level Metrics
-            c1, c2, c3, c4 = st.columns(4)
-            sales = df[df['type']=='Sales']['amount'].sum()
-            purch = df[df['type']=='Purchase']['amount'].sum()
-            receipts = df[df['type']=='Receipt']['amount'].sum()
-            payments = df[df['type']=='Payment']['amount'].sum()
-            cash_bal = receipts - payments # Simplified logic
+        st.title(f"Dashboard: {sel_co_name}")
+        if active_co_id:
+            # Relational Query: Fetch Vouchers for active_co_id
+            v_res = supabase.table("vouchers").select("*").eq("company_id", active_co_id).execute()
+            df = pd.DataFrame(v_res.data)
             
-            c1.metric("Gross Revenue", f"₹{sales:,.2f}", delta=f"{len(df[df['type']=='Sales'])} Invoices")
-            c2.metric("Total Procurement", f"₹{purch:,.2f}")
-            c3.metric("Net Cash Position", f"₹{cash_bal:,.2f}")
-            c4.metric("Voucher Volume", f"{len(df)}")
-            
-            st.divider()
-            
-            # Interactive Visuals
-            col_left, col_right = st.columns([2, 1])
-            with col_left:
-                st.subheader("Monthly Revenue Flow")
-                df['month'] = pd.to_datetime(df['date']).dt.strftime('%Y-%m')
-                chart_data = df.groupby('month')['amount'].sum().reset_index()
-                fig = px.area(chart_data, x='month', y='amount', color_discrete_sequence=['#ffd700'])
-                fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="#e0e0e0")
+            if not df.empty:
+                c1, c2, c3 = st.columns(3)
+                sales = df[df['vouch_type']=='Sales']['total_amount'].sum()
+                purch = df[df['vouch_type']=='Purchase']['total_amount'].sum()
+                c1.metric("Revenue", f"₹{sales:,.2f}")
+                c2.metric("Procurement", f"₹{purch:,.2f}")
+                c3.metric("Net Flow", f"₹{sales-purch:,.2f}")
+                
+                fig = px.line(df, x='date', y='total_amount', title="Cash Movement Trend")
+                fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#ffd700")
                 st.plotly_chart(fig, use_container_width=True)
-            
-            with col_right:
-                st.subheader("Expense Distribution")
-                type_data = df.groupby('type')['amount'].sum().reset_index()
-                fig_pie = px.pie(type_data, values='amount', names='type', hole=0.4, color_discrete_sequence=px.colors.sequential.YlOrBr)
-                fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#e0e0e0")
-                st.plotly_chart(fig_pie, use_container_width=True)
-        else:
-            st.info("System is ready. Awaiting initial transaction data.")
+            else: st.info("Ready for first transaction.")
 
-    # ==========================================
-    # 6. MODULE: MASTER SETUP & OPENING
-    # ==========================================
+    # --- MODULE 2: MASTER SETUP (LEDGERS & GROUPS) ---
     elif choice == "🏛️ Master Setup & Opening":
-        st.header("Ledger Master Management")
+        st.header("Master Ledger Creation")
+        t1, t2 = st.tabs(["New Company", "New Ledger"])
         
-        tab_m1, tab_m2 = st.tabs(["Create New Ledger", "Bulk Master Import"])
+        with t1:
+            with st.form("co_form"):
+                n = st.text_input("Company Name")
+                g = st.text_input("GSTIN")
+                a = st.text_area("Address")
+                if st.form_submit_button("🔨 Create Entity"):
+                    supabase.table("companies").insert({"name": n, "gstin": g, "address": a}).execute()
+                    st.success("Entity Hardened."); st.rerun()
         
-        with tab_m1:
-            with st.form("master_creation_form"):
-                col1, col2 = st.columns(2)
-                l_name = col1.text_input("Ledger Name")
-                l_grp = col2.selectbox("Primary Group", ["Capital Account", "Bank Accounts", "Cash-in-hand", "Sundry Debtors", "Sundry Creditors", "Fixed Assets", "Direct Income", "Indirect Expenses", "Loans (Liability)"])
+        with t2:
+            if active_co_id:
+                # Get Groups from SQL
+                grp_res = supabase.table("account_groups").select("*").execute()
+                grp_list = pd.DataFrame(grp_res.data)
                 
-                col3, col4 = st.columns(2)
-                op_bal = col3.number_input("Opening Balance (Dr is Positive, Cr is Negative)", format="%.2f")
-                gst_reg = col4.selectbox("Registration Type", ["Regular", "Composition", "Unregistered", "Consumer"])
-                
-                address = st.text_area("Mailing Details / Address")
-                
-                if st.form_submit_button("🔨 SECURE MASTER"):
-                    if l_name:
-                        payload = {
-                            "company_name": st.session_state.active_co,
-                            "date": "2026-04-01",
-                            "type": "Opening",
-                            "debit": l_name,
-                            "credit": "Opening Balance Balance Sheet",
-                            "amount": op_bal,
-                            "group_name": l_grp,
-                            "narration": f"Master Created: {l_grp} | GST: {gst_reg}"
-                        }
-                        supabase.table("vouchers").insert(payload).execute()
-                        st.success(f"Master Ledger '{l_name}' hardened successfully.")
-                        st.rerun()
+                with st.form("led_form"):
+                    ln = st.text_input("Ledger Name")
+                    lg = st.selectbox("Select Group", grp_list['name'].tolist())
+                    lg_id = grp_list[grp_list['name'] == lg]['id'].values[0]
+                    ob = st.number_input("Opening Balance")
+                    if st.form_submit_button("🔨 Create Ledger"):
+                        supabase.table("ledgers").insert({
+                            "company_id": active_co_id, "name": ln, "group_id": lg_id, "opening_balance": ob
+                        }).execute()
+                        st.success(f"Ledger {ln} Synced.")
 
-    # ==========================================
-    # 7. MODULE: SMART VOUCHER ENTRY
-    # ==========================================
+    # --- MODULE 3: SMART VOUCHER (RELATIONAL DOUBLE ENTRY) ---
     elif choice == "📝 Smart Voucher Entry":
-        st.header("Industrial Entry Suite")
-        v_num = len(df[df['type'] != 'Opening']) + 1
-        st.markdown(f"**Invoice Sequence:** `{st.session_state.active_co[:3].upper()}/26-27/{v_num:04d}`")
-        
-        with st.form("professional_voucher", clear_on_submit=True):
-            r1c1, r1c2, r1c3 = st.columns(3)
-            v_type = r1c1.selectbox("Voucher Class", ["Sales", "Purchase", "Receipt", "Payment", "Contra", "Journal"])
-            v_date = r1c2.date_input("Accounting Date")
-            cost_center = r1c3.selectbox("Department / Cost Center", ["Corporate", "Warehouse A", "Factory", "Branch B"])
+        st.header(f"Transaction: {sel_co_name}")
+        if active_co_id:
+            # Fetch ledgers for dropdowns
+            led_res = supabase.table("ledgers").select("id, name").eq("company_id", active_co_id).execute()
+            led_df = pd.DataFrame(led_res.data)
             
-            r2c1, r2c2 = st.columns(2)
-            dr_ledger = r2c1.text_input("Debit Account (Particulars)")
-            cr_ledger = r2c2.text_input("Credit Account (Particulars)")
-            
-            r3c1, r3c2, r3c3 = st.columns(3)
-            base_val = r3c1.number_input("Base Taxable Value", min_value=0.0)
-            gst_rate = r3c2.selectbox("Tax Rate (%)", [0, 5, 12, 18, 28])
-            currency = r3c3.selectbox("Currency", ["INR", "USD", "EUR"])
-            
-            st.divider()
-            item_name = st.text_input("Inventory Description / Item Details")
-            qty = st.number_input("Unit Quantity", min_value=0)
-            reference = st.text_area("Narration / Bill Reference Details")
-            
-            if st.form_submit_button("✅ POST TRANSACTION"):
-                total_tax = base_val * (gst_rate / 100)
-                final_val = base_val + total_tax
-                
-                payload = {
-                    "company_name": st.session_state.active_co,
-                    "date": str(v_date),
-                    "type": v_type,
-                    "debit": dr_ledger,
-                    "credit": cr_ledger,
-                    "amount": final_val,
-                    "item": item_name,
-                    "qty": qty,
-                    "narration": f"Ref: {reference} | Tax: {total_tax}",
-                    "group_name": cost_center
-                }
-                supabase.table("vouchers").insert(payload).execute()
-                st.success("Synchronized with Cloud Ledger.")
-                st.rerun()
+            if led_df.empty:
+                st.error("Create ledgers in Masters first!")
+            else:
+                with st.form("v_entry", clear_on_submit=True):
+                    c1, c2 = st.columns(2)
+                    v_type = c1.selectbox("Voucher Type", ["Sales", "Purchase", "Payment", "Receipt"])
+                    v_date = c2.date_input("Date")
+                    
+                    dr_name = st.selectbox("Debit Ledger", led_df['name'].tolist())
+                    cr_name = st.selectbox("Credit Ledger", led_df['name'].tolist())
+                    amt = st.number_input("Amount", min_value=0.0)
+                    nar = st.text_area("Narration")
+                    
+                    if st.form_submit_button("🚀 POST TRANSACTION"):
+                        dr_id = led_df[led_df['name'] == dr_name]['id'].values[0]
+                        cr_id = led_df[led_df['name'] == cr_name]['id'].values[0]
+                        
+                        # 1. Insert Voucher Header
+                        v_head = supabase.table("vouchers").insert({
+                            "company_id": active_co_id, "vouch_no": "AUTO", "vouch_type": v_type,
+                            "date": str(v_date), "total_amount": amt, "narration": nar
+                        }).execute()
+                        v_id = v_head.data[0]['id']
+                        
+                        # 2. Insert Split Entries (Double Entry)
+                        supabase.table("voucher_entries").insert([
+                            {"voucher_id": v_id, "ledger_id": dr_id, "debit_amount": amt},
+                            {"voucher_id": v_id, "ledger_id": cr_id, "credit_amount": amt}
+                        ]).execute()
+                        st.success("Posted to Eternal Ledger.")
 
-    # ==========================================
-    # 8. MODULE: INVENTORY & BATCH CONTROL
-    # ==========================================
-    elif choice == "📦 Inventory & Batch Control":
-        st.header("Stock Valuation & Movement")
-        
-        if not df.empty:
-            # Complex Inventory Math
-            stock_data = df[df['item'] != ""].copy()
-            if not stock_data.empty:
-                summary = stock_data.groupby('item').apply(lambda x: pd.Series({
-                    'Inward Qty': x[x['type'].isin(['Purchase', 'Opening'])]['qty'].sum(),
-                    'Outward Qty': x[x['type'] == 'Sales']['qty'].sum(),
-                    'Closing Qty': x[x['type'].isin(['Purchase', 'Opening'])]['qty'].sum() - x[x['type'] == 'Sales']['qty'].sum(),
-                    'Avg Rate': x[x['type'].isin(['Purchase', 'Opening'])]['amount'].mean()
-                })).reset_index()
-                
-                summary['Value'] = summary['Closing Qty'] * summary['Avg Rate']
-                st.dataframe(summary.style.highlight_max(axis=0), use_container_width=True)
-            else: st.warning("No itemized inventory vouchers found.")
-
-    # ==========================================
-    # 9. MODULE: FINAL ACCOUNTS (P&L / BS)
-    # ==========================================
+    # --- MODULE 4: FINAL ACCOUNTS (P&L / BS) ---
     elif choice == "⚖️ Final Accounts (P&L/BS)":
-        st.header("Statutory Financial Statements")
-        
-        tab_p1, tab_p2, tab_p3 = st.tabs(["Trial Balance", "Profit & Loss Account", "Balance Sheet"])
-        
-        if not df.empty:
-            ledgers = list(set(df['debit']).union(set(df['credit'])))
-            with tab_p1:
-                st.subheader("Unified Trial Balance")
-                tb_list = []
-                for l in ledgers:
-                    if l == "Opening Balance Balance Sheet": continue
-                    dr = df[df['debit']==l]['amount'].sum()
-                    cr = df[df['credit']==l]['amount'].sum()
-                    tb_list.append({"Ledger": l, "Debit": dr, "Credit": cr, "Net": dr-cr})
-                st.table(pd.DataFrame(tb_list))
-
-            with tab_p2:
-                sales = df[df['type']=='Sales']['amount'].sum()
-                purch = df[df['type']=='Purchase']['amount'].sum()
-                exp = df[df['type']=='Payment']['amount'].sum()
-                net_prof = sales - (purch + exp)
-                st.metric("Net Operational Profit", f"₹{net_prof:,.2f}", delta=f"{round((net_prof/sales)*100,2) if sales>0 else 0}%")
-
-            with tab_p3:
-                bs_data = []
-                for l in ledgers:
-                    if l == "Opening Balance Balance Sheet": continue
-                    bal = df[df['debit']==l]['amount'].sum() - df[df['credit']==l]['amount'].sum()
-                    if bal != 0: bs_data.append({"Acc": l, "Bal": bal})
-                
-                bs_df = pd.DataFrame(bs_data)
-                col_a, col_b = st.columns(2)
-                col_a.markdown("### Assets"); col_a.dataframe(bs_df[bs_df['Bal'] > 0])
-                col_b.markdown("### Liabilities"); col_b.dataframe(bs_df[bs_df['Bal'] < 0].assign(Bal=lambda x: x['Bal'].abs()))
-
-    # ==========================================
-    # 10. MODULE: RATIO ANALYSIS
-    # ==========================================
-    elif choice == "📈 Advanced Ratio Analysis":
-        st.header("Financial Performance Indicators")
-        if not df.empty:
-            ca = df[df['debit'].str.contains('Cash|Bank|Debtor', na=False)]['amount'].sum()
-            cl = df[df['credit'].str.contains('Creditor|Loan', na=False)]['amount'].sum()
+        st.header("Financial Performance")
+                if active_co_id:
+            # Relational Join to get amounts and ledger names
+            res = supabase.table("voucher_entries").select("*, ledgers(name, company_id)").execute()
+            ent_df = pd.json_normalize(res.data)
             
-            c1, c2, c3 = st.columns(3)
-            cur_ratio = round(ca/cl, 2) if cl > 0 else 0
-            c1.metric("Current Ratio (CA/CL)", cur_ratio, help="Standard is 2:1")
-            c2.metric("Working Capital", f"₹{ca-cl:,.2f}")
-            c3.metric("Debt Equity", "0.42", delta="-0.05")
+            # Filter for active company in Python logic for safety
+            if not ent_df.empty:
+                ent_df = ent_df[ent_df['ledgers.company_id'] == active_co_id]
+                st.dataframe(ent_df[['ledgers.name', 'debit_amount', 'credit_amount']])
+            else: st.info("No data.")
 
-    # ==========================================
-    # 11. MODULE: FORENSIC INTEGRITY AUDIT
-    # ==========================================
+    # --- MODULE 5: FORENSIC AUDIT ---
     elif choice == "🛡️ Forensic Integrity Audit":
-        st.header("Forensic Fraud & Logic Scanner")
-        if not df.empty:
-            # 1. Negative Cash Check
-            cash_bal = df[df['debit']=='Cash']['amount'].sum() - df[df['credit']=='Cash']['amount'].sum()
-            if cash_bal < 0: st.error(f"❌ CRITICAL: Negative Cash detected (Deficit: ₹{abs(cash_bal):,.2f})")
-            else: st.success("✅ Cash Logic: Integrity Confirmed.")
-            
-            # 2. Duplicate Check
-            dupes = df[df.duplicated(subset=['date', 'amount', 'debit'], keep=False)]
-            if not dupes.empty:
-                st.warning(f"⚠️ Warning: {len(dupes)} Suspected Duplicate Entries Found.")
-                st.dataframe(dupes)
-            
-            # 3. Gap Analysis
-            st.info(f"Scan complete. {len(df)} transactions verified across {len(set(df['debit']))} ledgers.")
+        st.header("Fraud & Integrity Scanner")
+        if active_co_id:
+            v_res = supabase.table("vouchers").select("*").eq("company_id", active_co_id).execute()
+            v_df = pd.DataFrame(v_res.data)
+            if not v_df.empty:
+                dupes = v_df[v_df.duplicated(['total_amount', 'date'])]
+                if not dupes.empty: st.warning(f"Suspected Duplicates: {len(dupes)}")
+                else: st.success("Voucher Integrity: Verified.")
 
-    # ==========================================
-    # 12. MODULE: SYSTEM SETTINGS
-    # ==========================================
-    elif choice == "⚙️ System Configuration":
-        st.header("ERP Global Settings")
-        st.write(f"Logged in as: Administrator (Mayur)")
-        st.write(f"API Connection: Supabase Cloud Hyper-Scale")
-        if st.button("Download Full Audit Log (JSON)"):
-            st.download_button("Click to Download", df.to_json(), "Audit_Log.json")
-        
-        if st.sidebar.button("🔐 TERMINATE SESSION"):
-            st.session_state.logged_in = False
-            st.rerun()
-
-# End of Code
+    if st.sidebar.button("🔐 LOGOUT"):
+        st.session_state.logged_in = False; st.rerun()
