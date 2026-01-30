@@ -2,99 +2,142 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
 from datetime import datetime
+import plotly.express as px
 
-# 1. PAGE SETUP
-st.set_page_config(page_title="MAYUR OSWAL TALLY ERP", page_icon="🏦", layout="wide")
+# 1. SYSTEM CONFIGURATION
+st.set_page_config(page_title="OSWAL TALLY PRO: ENTERPRISE", layout="wide", initial_sidebar_state="expanded")
 
-# 2. CLOUD DATABASE
-url: str = st.secrets["SUPABASE_URL"]
-key: str = st.secrets["SUPABASE_KEY"]
-supabase: Client = create_client(url, key)
+# 2. CLOUD DATABASE ENGINE
+@st.cache_resource
+def init_connection():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
 
-# 3. AUTHENTICATION LOGIC
+supabase = init_connection()
+
+# 3. AUTHENTICATION ENGINE
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
-if not st.session_state.logged_in:
-    st.title("🛡️ Gateway to Tally: Secure Login")
-    u_input = st.text_input("Username").lower().strip()
-    p_input = st.text_input("Password", type="password").strip()
-    
-    if st.button("Login"):
-        # This checks for 'mayur' and '1234' while ignoring spaces/capitals
-        if u_input == "mayur" and p_input == "1234":
-            st.session_state.logged_in = True
-            st.rerun()
-        else:
-            st.error("Access Denied: Use username 'mayur' and password '1234'")
-else:
-    # 4. GATEWAY OF TALLY NAVIGATION
-    st.sidebar.title("🚩 Gateway of Tally")
-    menu = [
-        "Dashboard", "Voucher Entry (F4-F9)", "Day Book", 
-        "Trial Balance", "Profit & Loss A/c", "Balance Sheet", 
-        "Stock Summary", "Export to Desktop"
-    ]
-    choice = st.sidebar.radio("Main Menu", menu)
-    
-    # FETCH DATA
+def login_screen():
+    st.markdown("<h1 style='text-align: center;'>🔐 ENTERPRISE GATEWAY</h1>", unsafe_allow_html=True)
+    with st.container():
+        col1, col2, col3 = st.columns([1,2,1])
+        with col2:
+            u = st.text_input("Admin ID").lower().strip()
+            p = st.text_input("Access Key", type="password")
+            if st.button("AUTHENTICATE", use_container_width=True):
+                if u == "mayur" and p == "1234":
+                    st.session_state.logged_in = True
+                    st.rerun()
+                else:
+                    st.error("Invalid Credentials")
+
+# 4. DATA PROCESSING CORE
+def fetch_all_data():
     try:
         res = supabase.table("vouchers").select("*").execute()
-        df = pd.DataFrame(res.data)
+        return pd.DataFrame(res.data)
     except:
-        df = pd.DataFrame()
+        return pd.DataFrame()
 
-    if choice == "Dashboard":
-        st.title("📊 Accounting Dashboard")
+# 5. MAIN APPLICATION LOGIC
+if not st.session_state.logged_in:
+    login_screen()
+else:
+    df = fetch_all_data()
+    
+    # SIDEBAR NAVIGATION
+    st.sidebar.title("💎 OSWAL TALLY PRO")
+    st.sidebar.info(f"Connected to Cloud: {datetime.now().strftime('%Y-%m-%d')}")
+    
+    menu = ["📊 Executive Dashboard", "📝 Voucher Management", "📖 Digital Day Book", 
+            "⚖️ Trial Balance", "📊 Profit & Loss", "🏦 Balance Sheet", "⚙️ System Settings"]
+    choice = st.sidebar.radio("Main Menu", menu)
+
+    # --- DASHBOARD MODULE ---
+    if choice == "📊 Executive Dashboard":
+        st.title("Financial Overview")
         if not df.empty:
-            c1, c2 = st.columns(2)
-            c1.metric("Total Vouchers", len(df))
-            c2.metric("Total Value", f"₹{df['amount'].sum():,.2f}")
-            st.line_chart(df.groupby('date')['amount'].sum())
+            c1, c2, c3, c4 = st.columns(4)
+            total_val = df['amount'].sum()
+            c1.metric("Gross Turnover", f"₹{total_val:,.2f}")
+            c2.metric("Total Vouchers", len(df))
+            
+            # Interactive Chart
+            fig = px.area(df, x="created_at", y="amount", title="Cash Flow Velocity")
+            st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("No data yet. Go to Voucher Entry.")
+            st.warning("No data found in cloud database.")
 
-    elif choice == "Voucher Entry (F4-F9)":
-        st.header("📝 Voucher Creation")
-        v_type = st.selectbox("Type", ["Payment", "Receipt", "Contra", "Journal", "Sales", "Purchase"])
-        with st.form("tally_form", clear_on_submit=True):
+    # --- VOUCHER ENTRY MODULE ---
+    elif choice == "📝 Voucher Management":
+        st.header("Advanced Voucher Creation")
+        tabs = st.tabs(["New Entry", "Pending Approvals", "Drafts"])
+        
+        with tabs[0]:
+            with st.form("pro_entry", clear_on_submit=True):
+                c1, c2 = st.columns(2)
+                v_type = c1.selectbox("Voucher Category", ["Payment", "Receipt", "Contra", "Sales", "Purchase", "Journal"])
+                v_date = c2.date_input("Accounting Date")
+                
+                dr_acc = st.text_input("Debit Account (Dr)")
+                cr_acc = st.text_input("Credit Account (Cr)")
+                
+                c3, c4 = st.columns(2)
+                amt = c3.number_input("Transaction Value (INR)", min_value=0.01)
+                gst = c4.selectbox("GST Rate (%)", [0, 5, 12, 18, 28])
+                
+                narration = st.text_area("Narration / Remarks")
+                
+                if st.form_submit_button("✅ POST TO CLOUD"):
+                    if dr_acc and cr_acc and amt > 0:
+                        payload = {
+                            "debit": dr_acc, "credit": cr_acc, "amount": amt,
+                            "type": v_type, "narration": narration, "date": str(v_date)
+                        }
+                        supabase.table("vouchers").insert(payload).execute()
+                        st.success("Transaction Successfully Hardened to Database.")
+                        st.rerun()
+
+    # --- DAY BOOK MODULE ---
+    elif choice == "📖 Digital Day Book":
+        st.header("Transaction Logs")
+        if not df.empty:
+            # Filtering logic
+            search = st.text_input("🔍 Search by Account Name")
+            filtered_df = df[(df['debit'].str.contains(search, case=False)) | (df['credit'].str.contains(search, case=False))]
+            st.dataframe(filtered_df, use_container_width=True)
+        else:
+            st.error("Log file is empty.")
+
+    # --- BALANCE SHEET MODULE ---
+    elif choice == "🏦 Balance Sheet":
+        st.header("Institutional Balance Sheet")
+        if not df.empty:
+            # Calculate Net Balances
+            all_accounts = set(df['debit']).union(set(df['credit']))
+            balances = []
+            for acc in all_accounts:
+                dr_val = df[df['debit'] == acc]['amount'].sum()
+                cr_val = df[df['credit'] == acc]['amount'].sum()
+                balances.append({"Particulars": acc, "Net": dr_val - cr_val})
+            
+            b_df = pd.DataFrame(balances)
             col1, col2 = st.columns(2)
+            
             with col1:
-                v_date = st.date_input("Date")
-                dr = st.text_input("By (Debit)")
+                st.subheader("Liabilities (Sources)")
+                st.table(b_df[b_df['Net'] < 0].assign(Net=lambda x: x['Net'].abs()))
+                
             with col2:
-                amt = st.number_input("Amount", min_value=0.0)
-                cr = st.text_input("To (Credit)")
-            nar = st.text_area("Narration")
-            if st.form_submit_button("Accept"):
-                if dr and cr and amt > 0:
-                    data = {"date": str(v_date), "type": v_type, "debit": dr, "credit": cr, "amount": amt, "narration": nar}
-                    supabase.table("vouchers").insert(data).execute()
-                    st.success("Voucher Saved!")
-                else:
-                    st.error("Please fill all fields.")
+                st.subheader("Assets (Applications)")
+                st.table(b_df[b_df['Net'] > 0])
+        else:
+            st.info("Insufficient data for balance calculation.")
 
-    elif choice == "Trial Balance":
-        st.header("⚖️ Trial Balance")
-        if not df.empty:
-            d_sum = df.groupby('debit')['amount'].sum()
-            c_sum = df.groupby('credit')['amount'].sum()
-            all_ac = sorted(list(set(d_sum.index) | set(c_sum.index)))
-            st.table([{"Particulars": a, "Debit": d_sum.get(a,0), "Credit": c_sum.get(a,0)} for a in all_ac])
-
-    elif choice == "Profit & Loss A/c":
-        st.header("📈 Profit & Loss")
-        if not df.empty:
-            sales = df[df['type'] == 'Sales']['amount'].sum()
-            pur = df[df['type'] == 'Purchase']['amount'].sum()
-            st.metric("Gross Profit", f"₹{sales - pur}")
-
-    elif choice == "Export to Desktop":
-        st.header("📤 Export Data")
-        if not df.empty:
-            st.download_button("Download CSV for Tally Prime", df.to_csv(index=False), "tally.csv", "text/csv")
-
-    st.sidebar.markdown("---")
-    if st.sidebar.button("Logout"):
+    # LOGOUT
+    if st.sidebar.button("EXIT SYSTEM"):
         st.session_state.logged_in = False
         st.rerun()
