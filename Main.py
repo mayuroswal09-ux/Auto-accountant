@@ -2,142 +2,133 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
 from datetime import datetime
-import plotly.express as px
 
-# 1. SYSTEM CONFIGURATION
-st.set_page_config(page_title="OSWAL TALLY PRO: ENTERPRISE", layout="wide", initial_sidebar_state="expanded")
+# 1. CORE SYSTEM CONFIG
+st.set_page_config(page_title="OSWAL TALLY ERP: ULTIMATE", layout="wide")
 
-# 2. CLOUD DATABASE ENGINE
-@st.cache_resource
-def init_connection():
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    return create_client(url, key)
+# 2. DATABASE AUTH
+url = st.secrets["SUPABASE_URL"]
+key = st.secrets["SUPABASE_KEY"]
+supabase = create_client(url, key)
 
-supabase = init_connection()
-
-# 3. AUTHENTICATION ENGINE
+# 3. SESSION STATE FOR "PURE" APP FEEL
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
-def login_screen():
-    st.markdown("<h1 style='text-align: center;'>🔐 ENTERPRISE GATEWAY</h1>", unsafe_allow_html=True)
-    with st.container():
-        col1, col2, col3 = st.columns([1,2,1])
-        with col2:
-            u = st.text_input("Admin ID").lower().strip()
-            p = st.text_input("Access Key", type="password")
-            if st.button("AUTHENTICATE", use_container_width=True):
-                if u == "mayur" and p == "1234":
-                    st.session_state.logged_in = True
-                    st.rerun()
-                else:
-                    st.error("Invalid Credentials")
-
-# 4. DATA PROCESSING CORE
-def fetch_all_data():
-    try:
-        res = supabase.table("vouchers").select("*").execute()
-        return pd.DataFrame(res.data)
-    except:
-        return pd.DataFrame()
-
-# 5. MAIN APPLICATION LOGIC
+# 4. LOGIN INTERFACE
 if not st.session_state.logged_in:
-    login_screen()
+    st.title("🛡️ Enterprise Secure Gateway")
+    with st.container():
+        u = st.text_input("Username").lower().strip()
+        p = st.text_input("Password", type="password")
+        if st.button("Access System"):
+            if u == "mayur" and p == "1234":
+                st.session_state.logged_in = True
+                st.rerun()
+            else:
+                st.error("Invalid Credentials")
 else:
-    df = fetch_all_data()
-    
-    # SIDEBAR NAVIGATION
-    st.sidebar.title("💎 OSWAL TALLY PRO")
-    st.sidebar.info(f"Connected to Cloud: {datetime.now().strftime('%Y-%m-%d')}")
-    
-    menu = ["📊 Executive Dashboard", "📝 Voucher Management", "📖 Digital Day Book", 
-            "⚖️ Trial Balance", "📊 Profit & Loss", "🏦 Balance Sheet", "⚙️ System Settings"]
+    # 5. DATA ENGINE: FETCHING ALL TABLES
+    try:
+        v_res = supabase.table("vouchers").select("*").execute()
+        df = pd.DataFrame(v_res.data)
+    except:
+        df = pd.DataFrame()
+
+    # SIDEBAR: THE GATEWAY OF TALLY
+    st.sidebar.title("🚩 Gateway of Tally")
+    menu = ["📊 Dashboard", "📝 Voucher Entry", "📦 Inventory Master", "📖 Day Book", "⚖️ Trial Balance", "📈 Profit & Loss", "🏦 Balance Sheet"]
     choice = st.sidebar.radio("Main Menu", menu)
 
-    # --- DASHBOARD MODULE ---
-    if choice == "📊 Executive Dashboard":
-        st.title("Financial Overview")
+    # --- DASHBOARD ---
+    if choice == "📊 Dashboard":
+        st.title("Business Analytics")
         if not df.empty:
-            c1, c2, c3, c4 = st.columns(4)
-            total_val = df['amount'].sum()
-            c1.metric("Gross Turnover", f"₹{total_val:,.2f}")
-            c2.metric("Total Vouchers", len(df))
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Total Sales", f"₹{df[df['type']=='Sales']['amount'].sum():,.2f}")
+            c2.metric("Total Purchases", f"₹{df[df['type']=='Purchase']['amount'].sum():,.2f}")
+            c3.metric("Net Cash Flow", f"₹{df['amount'].sum():,.2f}")
+            st.area_chart(df.groupby('date')['amount'].sum())
+        else:
+            st.info("System Ready. Please enter initial vouchers.")
+
+    # --- VOUCHER ENTRY (Double Entry Logic) ---
+    elif choice == "📝 Voucher Entry":
+        st.header("Voucher Creation (Double Entry)")
+        with st.form("v_form", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            v_type = col1.selectbox("Voucher Type", ["Receipt", "Payment", "Contra", "Sales", "Purchase", "Journal"])
+            v_date = col2.date_input("Date")
             
-            # Interactive Chart
-            fig = px.area(df, x="created_at", y="amount", title="Cash Flow Velocity")
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("No data found in cloud database.")
+            dr_ledger = st.text_input("Particulars (Debit Account)")
+            cr_ledger = st.text_input("Particulars (Credit Account)")
+            
+            col3, col4 = st.columns(2)
+            v_amt = col3.number_input("Amount (₹)", min_value=0.0)
+            v_item = col4.text_input("Item Name (For Inventory)")
+            
+            v_narration = st.text_area("Narration")
+            
+            if st.form_submit_button("Accept"):
+                if dr_ledger and cr_ledger and v_amt > 0:
+                    payload = {
+                        "date": str(v_date), "type": v_type, "debit": dr_ledger,
+                        "credit": cr_ledger, "amount": v_amt, "item": v_item, "narration": v_narration
+                    }
+                    supabase.table("vouchers").insert(payload).execute()
+                    st.success("Voucher Posted Successfully!")
+                    st.rerun()
 
-    # --- VOUCHER ENTRY MODULE ---
-    elif choice == "📝 Voucher Management":
-        st.header("Advanced Voucher Creation")
-        tabs = st.tabs(["New Entry", "Pending Approvals", "Drafts"])
-        
-        with tabs[0]:
-            with st.form("pro_entry", clear_on_submit=True):
-                c1, c2 = st.columns(2)
-                v_type = c1.selectbox("Voucher Category", ["Payment", "Receipt", "Contra", "Sales", "Purchase", "Journal"])
-                v_date = c2.date_input("Accounting Date")
-                
-                dr_acc = st.text_input("Debit Account (Dr)")
-                cr_acc = st.text_input("Credit Account (Cr)")
-                
-                c3, c4 = st.columns(2)
-                amt = c3.number_input("Transaction Value (INR)", min_value=0.01)
-                gst = c4.selectbox("GST Rate (%)", [0, 5, 12, 18, 28])
-                
-                narration = st.text_area("Narration / Remarks")
-                
-                if st.form_submit_button("✅ POST TO CLOUD"):
-                    if dr_acc and cr_acc and amt > 0:
-                        payload = {
-                            "debit": dr_acc, "credit": cr_acc, "amount": amt,
-                            "type": v_type, "narration": narration, "date": str(v_date)
-                        }
-                        supabase.table("vouchers").insert(payload).execute()
-                        st.success("Transaction Successfully Hardened to Database.")
-                        st.rerun()
-
-    # --- DAY BOOK MODULE ---
-    elif choice == "📖 Digital Day Book":
-        st.header("Transaction Logs")
+    # --- DAY BOOK ---
+    elif choice == "📖 Day Book":
+        st.header("Day Book")
         if not df.empty:
-            # Filtering logic
-            search = st.text_input("🔍 Search by Account Name")
-            filtered_df = df[(df['debit'].str.contains(search, case=False)) | (df['credit'].str.contains(search, case=False))]
-            st.dataframe(filtered_df, use_container_width=True)
+            st.dataframe(df[['date', 'type', 'debit', 'credit', 'amount', 'narration']], use_container_width=True)
         else:
-            st.error("Log file is empty.")
+            st.warning("No entries found.")
 
-    # --- BALANCE SHEET MODULE ---
+    # --- TRIAL BALANCE ---
+    elif choice == "⚖️ Trial Balance":
+        st.header("Trial Balance")
+        if not df.empty:
+            all_ledgers = set(df['debit']).union(set(df['credit']))
+            tb_list = []
+            for led in all_ledgers:
+                dr = df[df['debit'] == led]['amount'].sum()
+                cr = df[df['credit'] == led]['amount'].sum()
+                tb_list.append({"Ledger": led, "Debit": dr if dr > cr else 0, "Credit": cr if cr > dr else 0})
+            st.table(pd.DataFrame(tb_list))
+
+    # --- BALANCE SHEET (The "Pure" Logic) ---
     elif choice == "🏦 Balance Sheet":
-        st.header("Institutional Balance Sheet")
+        st.header("Balance Sheet")
         if not df.empty:
-            # Calculate Net Balances
-            all_accounts = set(df['debit']).union(set(df['credit']))
+            all_ledgers = set(df['debit']).union(set(df['credit']))
             balances = []
-            for acc in all_accounts:
-                dr_val = df[df['debit'] == acc]['amount'].sum()
-                cr_val = df[df['credit'] == acc]['amount'].sum()
-                balances.append({"Particulars": acc, "Net": dr_val - cr_val})
+            for led in all_ledgers:
+                bal = df[df['debit'] == led]['amount'].sum() - df[df['credit'] == led]['amount'].sum()
+                balances.append({"Ledger": led, "Balance": bal})
             
             b_df = pd.DataFrame(balances)
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.subheader("Liabilities (Sources)")
-                st.table(b_df[b_df['Net'] < 0].assign(Net=lambda x: x['Net'].abs()))
-                
-            with col2:
-                st.subheader("Assets (Applications)")
-                st.table(b_df[b_df['Net'] > 0])
-        else:
-            st.info("Insufficient data for balance calculation.")
+            c1, c2 = st.columns(2)
+            with c1:
+                st.subheader("Liabilities")
+                st.table(b_df[b_df['Balance'] < 0])
+            with c2:
+                st.subheader("Assets")
+                st.table(b_df[b_df['Balance'] > 0])
 
-    # LOGOUT
-    if st.sidebar.button("EXIT SYSTEM"):
+    # --- INVENTORY MASTER ---
+    elif choice == "📦 Inventory Master":
+        st.header("Stock Summary")
+        if not df.empty and 'item' in df.columns:
+            items = df[df['item'] != ""].groupby('item').agg({
+                'amount': 'count'
+            }).rename(columns={'amount': 'Quantity Sold/Purchased'})
+            st.table(items)
+        else:
+            st.info("No inventory movements recorded.")
+
+    if st.sidebar.button("Logout"):
         st.session_state.logged_in = False
         st.rerun()
